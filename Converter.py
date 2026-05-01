@@ -176,7 +176,8 @@ class Converter:
             if output_file is not None
             else self._default_output_path(in_path, "_disparity")
         )
-        return self._save_array_file(disparity, out_path)
+        # return self._save_array_file(disparity, out_path)
+        return disparity
 
     def convert_Depth_to_PointCloud(
         self,
@@ -279,7 +280,7 @@ if __name__ == "__main__":
 				"s": 0
 			}
     # converter.Convert_Disparity_to_Depth(disparity_file="disp.npy")
-    converter.Convert_Depth_to_Disparity(depth_file="/Users/ahmed_ali/Documents/GitHub/DeepView3D/Dataset/NVIDIA/fat/mixed/kitchen_0/000000.left.depth.png",baseline=6.0)
+    # converter.Convert_Depth_to_Disparity(depth_file="/Users/ahmed_ali/Documents/GitHub/DeepView3D/Dataset/NVIDIA/fat/mixed/kitchen_0/000000.left.depth.png",baseline=6.0)
     # converter.convert_Depth_to_PointCloud(depth_file="/Users/ahmed_ali/Documents/GitHub/DeepView3D/Dataset/NVIDIA/fat/mixed/kitchen_0/000000.left.depth.png", intrinsics=intrinsics)
     # converter.convert_PointCloud_to_Depth(
     #     image_shape=(480, 640), pointcloud_file="pointcloud.npy"
