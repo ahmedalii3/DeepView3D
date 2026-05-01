@@ -110,7 +110,7 @@ class Residual_Unet(tf.keras.Model):
         self.up_concat4 = tf.keras.layers.Concatenate()
         self.idblock7 = Identity_block(64, 3, 1)
 
-        self.output_con_def = tf.keras.layers.Conv2D(2, 1, padding='same', activation='linear')
+        self.output_con_def = tf.keras.layers.Conv2D(1, 1, padding='same', activation='linear')
 
 
     def call(self, inputs):
