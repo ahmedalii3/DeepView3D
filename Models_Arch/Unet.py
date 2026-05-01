@@ -96,7 +96,7 @@ class Unet(tf.keras.Model):
         self.upconv_block4 = UpConv_block(64)
         self.conv_block9 = Conv_block(64)
 
-        self.output_def = Conv2D(2, 1, activation = 'linear')
+        self.output_def = Conv2D(1, 1, activation = 'linear')
 
     def call(self, inputs):
         moving, fixed = inputs
