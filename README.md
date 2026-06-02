@@ -1,5 +1,177 @@
 # DeepView3D
 
+**Stereo-based 3D reconstruction comparing two paradigms on the same inputs:**
+a **classical** Semi-Global Block Matching (SGBM) pipeline and a **deep-learning**
+U-Net family that predicts dense depth from a stereo pair. Both produce a dense
+depth map that is back-projected into a 3D point cloud, and both are evaluated on
+the NVIDIA Falling Things (FAT) synthetic stereo dataset.
+
+| Approach | Folder | Idea |
+|---|---|---|
+| **Classical** | [`ClassicalApproach/`](ClassicalApproach/) | Geometry-driven SGBM: rectify → disparity (with left–right fusion) → triangulate to metric depth → point cloud. No training. |
+| **Deep Learning** | [`DeepLearningApproach/`](DeepLearningApproach/) | Custom U-Net family (21 variants) that takes left+right RGB and predicts dense disparity/depth, trained with a masked Huber loss. |
+
+```
+DeepView3D/
+├── ClassicalApproach/        # Traditional SGBM stereo pipeline
+│   ├── requirements.txt
+│   └── sgbm/                  # Python package (run with `python -m sgbm...`)
+├── DeepLearningApproach/      # U-Net depth-prediction pipeline
+└── README.md
+```
+
+Both pipelines share the same camera model and dataset convention (FAT): pinhole
+camera, no distortion, resolution 960 × 540, `fx = fy = 768.16`, `cx = 480`,
+`cy = 270`, baseline `B = 0.06 m`, ground-truth depth stored as 16-bit PNG in
+0.1 mm units (÷ 10000 → meters).
+
+---
+
+# Classical Approach (SGBM)
+
+Classical stereo depth reconstruction using Semi-Global Block Matching, located in
+`ClassicalApproach/sgbm/`.
+
+## What it does
+
+Given a calibrated stereo image pair, the pipeline:
+
+1. **Rectifies** both images so epipolar lines are horizontal (`cv2.stereoRectify` + remap)
+2. **Computes disparity** with OpenCV's `StereoSGBM` (left- and right-reference, then fuses them to fill the left-edge dead band)
+3. **Converts disparity to depth** using `Z = fx × baseline / disparity`
+4. **Back-projects** valid depth pixels into a 3-D point cloud (PLY)
+5. **Evaluates** against ground-truth depth: AbsRel, RMSE, δ < 1.25, coverage
+
+### Left-edge dead band fix
+
+`StereoSGBM` can only search `numDisparities` columns to the right of each pixel,
+so the leftmost 128 columns always come out empty. We fix this by running a second
+SGBM pass with the images flipped horizontally (right-camera as reference), then
+re-projecting those disparities back into left-image coordinates to fill the gap.
+Coverage jumps from ~80% to ~95% with no accuracy loss on the originally valid
+pixels.
+
+## Folder structure
+
+```
+ClassicalApproach/
+├── requirements.txt
+└── sgbm/
+    ├── config.py           # global paths and SGBM parameters (SgbmParams)
+    ├── dense/
+    │   ├── rectify.py      # stereo rectification (cv2.stereoRectify + remap)
+    │   ├── sgbm.py         # SGBM matching, LR fusion, disparity → depth
+    │   └── pipeline.py     # end-to-end dense stereo pipeline
+    ├── eval/
+    │   └── metrics.py      # AbsRel, RMSE, delta<1.25, coverage
+    ├── io/
+    │   ├── fat_io.py       # FAT camera loader, RGB + GT depth reader
+    │   ├── depth_io.py     # save/load .npy depth maps
+    │   └── ply_io.py       # write ASCII PLY point clouds
+    ├── runners/
+    │   ├── discover.py     # auto-discover dataset instances
+    │   ├── run_one.py      # run pipeline for a single scene/frame
+    │   ├── run_all.py      # run all instances, write metrics CSV
+    │   ├── run_from_depth.py # evaluate a precomputed depth map
+    │   └── visualize.py    # depth overlay, compare panel, 3-D point cloud
+    └── tests/
+        ├── test_fat_io.py  # smoke tests against live dataset
+        └── test_metrics.py # unit tests for metric functions
+```
+
+## Dataset setup
+
+Download the FAT dataset from the
+[NVIDIA project page](https://research.nvidia.com/publication/2018-06_falling-things-synthetic-dataset-3d-object-detection-and-pose-estimation)
+and place scene folders under `ClassicalApproach/datasets/fat/`:
+
+```
+ClassicalApproach/datasets/fat/
+├── Kitchen/
+│   ├── _camera_settings.json
+│   ├── 000000.left.jpg
+│   ├── 000000.right.jpg
+│   ├── 000000.left.depth.png
+│   └── ...
+├── Kitedemo/
+└── Temple_1/
+```
+
+Each scene must contain `_camera_settings.json` plus matching `.left.jpg`,
+`.right.jpg`, `.left.depth.png`, `.right.depth.png`, `.left.json`, and
+`.right.json` files per frame.
+
+## Installation
+
+```bash
+cd ClassicalApproach
+pip install -r requirements.txt
+```
+
+Python 3.10+ recommended.
+
+## Usage
+
+All commands are run from inside `ClassicalApproach/` (the `sgbm` package root):
+
+**Run all scenes:**
+```bash
+cd ClassicalApproach
+python -m sgbm.runners.run_all
+```
+
+**Run one scene/frame:**
+```bash
+python -m sgbm.runners.run_one Kitchen 000000
+```
+
+**Visualize results:**
+```bash
+# Depth overlay
+python -m sgbm.runners.visualize depth Kitchen 000000
+
+# 4-panel comparison (RGB | dense | GT | point cloud)
+python -m sgbm.runners.visualize compare Kitchen 000000
+
+# Full grid across all scenes
+python -m sgbm.runners.visualize grid
+
+# 3-D point cloud scatter + 2-D overlay
+python -m sgbm.runners.visualize pointcloud Kitchen 000000
+
+# Summary grid of all point clouds
+python -m sgbm.runners.visualize pointcloud-grid
+```
+
+**Run tests:**
+```bash
+pytest sgbm/tests/
+```
+
+Outputs are written to `ClassicalApproach/outputs/sgbm_fat/<scene>/<frame>/`.
+
+## Parameters
+
+Key parameters are in `sgbm/config.py` → `SgbmParams`:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `sgbm_num_disparities` | 128 | Disparity search range (px); also equals left dead-band width |
+| `sgbm_block_size` | 5 | Matching block size; larger = smoother but loses fine edges |
+| `sgbm_uniqueness_ratio` | 10 | Reject ambiguous matches (higher = stricter) |
+| `depth_max_m` | 20.0 | Clip depth beyond this (meters) |
+
+## Results
+
+Evaluated on FAT stereo pairs (960 × 540, `fx = fy = 768.16`, baseline 0.06 m):
+
+| Scene | AbsRel ↓ | RMSE ↓ | δ<1.25 ↑ | Coverage ↑ |
+|-------|----------|--------|----------|------------|
+| Kitchen/000000 | 0.073 | 0.498 | 91.6% | 92.8% |
+| Kitchen/000001 | 0.135 | 0.609 | 90.5% | 80.2% |
+| Kitedemo/000000 | 0.017 | 0.143 | 98.9% | 96.4% |
+| Temple_1/000000 | 0.013 | 0.139 | 99.5% | 96.1% |
+
 ---
 
 # Deep Learning
@@ -274,3 +446,21 @@ pip install tensorflow opencv-python numpy matplotlib scipy pillow
 ```
 
 GPU training is strongly recommended. The training loop pins computation to `/GPU:0` automatically when a GPU is available.
+
+---
+
+# Benchmark: Classical vs. Deep Learning
+
+Best learned model vs. pretrained state-of-the-art monocular models on the FAT test set:
+
+| Model | AbsRel ↓ | RMSE ↓ |
+|---|---|---|
+| **Residual_Unet_3D_5K (ours)** | **0.0725** | **8.10** |
+| ZoeDepth-NK | 0.1622 | 16.99 |
+| Depth-Anything-V2-Small | 0.7928 | 51.39 |
+| DPT-Large | 0.8250 | 50.47 |
+
+Head-to-head, the two paradigms are complementary: **SGBM** is dramatically more
+accurate on near, textured surfaces and yields the cleanest metric geometry, while
+the **deep model** is more robust on far, low-texture regions and reaches full
+(100%) coverage by construction.

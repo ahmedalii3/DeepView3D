@@ -1,1 +1,5 @@
 Dataset/
+
+# Python caches
+__pycache__/
+*.pyc
