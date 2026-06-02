@@ -161,17 +161,6 @@ Key parameters are in `sgbm/config.py` → `SgbmParams`:
 | `sgbm_uniqueness_ratio` | 10 | Reject ambiguous matches (higher = stricter) |
 | `depth_max_m` | 20.0 | Clip depth beyond this (meters) |
 
-## Results
-
-Evaluated on FAT stereo pairs (960 × 540, `fx = fy = 768.16`, baseline 0.06 m):
-
-| Scene | AbsRel ↓ | RMSE ↓ | δ<1.25 ↑ | Coverage ↑ |
-|-------|----------|--------|----------|------------|
-| Kitchen/000000 | 0.073 | 0.498 | 91.6% | 92.8% |
-| Kitchen/000001 | 0.135 | 0.609 | 90.5% | 80.2% |
-| Kitedemo/000000 | 0.017 | 0.143 | 98.9% | 96.4% |
-| Temple_1/000000 | 0.013 | 0.139 | 99.5% | 96.1% |
-
 ---
 
 # Deep Learning
